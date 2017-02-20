@@ -41,7 +41,7 @@ var architectures = []string{"armhf", "arm64", "i386", "amd64"}
 func show(storeResponses []StoreResponse) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	for _, sd := range storeResponses {
-		fmt.Fprintf(w, " %s\t| %s\t| %d\t| %s\n", *snapName, *channel, sd.Revision, sd.Architecture[0])
+		fmt.Fprintf(w, " %s\t| %s\t| %s\t| %d\t| %s\n", *snapName, *channel, sd.Version, sd.Revision, sd.Architecture[0])
 	}
 	w.Flush()
 }
