@@ -90,6 +90,9 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			} else {
+				if len(tmp.Architecture) < 1 {
+					tmp.Architecture = append(tmp.Architecture, "n/a")
+				}
 				storeResponses = append(storeResponses, tmp)
 			}
 			wg.Done()
