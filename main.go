@@ -30,76 +30,78 @@ import (
 )
 
 var (
-	channel  = flag.String("channel", "candidate", "Channel from which the snap version is queried")
 	snapName = flag.String("snap", "bluez", "Snap to query")
 )
 
+var channels = []string{"stable", "candidate", "beta", "edge"}
 var architectures = []string{"armhf", "arm64", "i386", "amd64"}
 
 // Shows the results in a rmadison fashion, that is:
-// snap name | channel | revision | archiitecture
+// snap name | channel | revision | architecture
 func show(storeResponses []StoreResponse) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', 0)
 	for _, sd := range storeResponses {
-		fmt.Fprintf(w, " %s\t| %s\t| %s\t| %d\t| %s\n", *snapName, *channel, sd.Version, sd.Revision, sd.Architecture[0])
+		fmt.Fprintf(w, " %s\t| %s\t| %s\t| %d\t| %s\n", *snapName, sd.Channel, sd.Version, sd.Revision, sd.Architecture[0])
 	}
 	w.Flush()
 }
 
 func main() {
 	flag.Parse()
-
-	url := fmt.Sprintf("https://search.apps.ubuntu.com/api/v1/snaps/details/%s?channel=%s", *snapName, *channel)
-
-	jsonResponses := make(chan io.ReadCloser)
 	var storeResponses []StoreResponse
 
-	var wg sync.WaitGroup
-	wg.Add(len(architectures) * 2)
+	for _, channel := range channels {
+		url := fmt.Sprintf("https://search.apps.ubuntu.com/api/v1/snaps/details/%s?channel=%s", *snapName, channel)
 
-	// Go and fetch for each architecture asynchronuously
-	for _, arch := range architectures {
-		go func(arch string, url string) {
-			defer wg.Done()
+		jsonResponses := make(chan io.ReadCloser)
 
-			// Create HTTP request & Client
-			req, err := http.NewRequest("GET", url, nil)
-			if err != nil {
-				log.Fatal("NewRequest: ", err)
-				return
-			}
-			req.Header.Set("X-Ubuntu-Series", "16")
-			client := &http.Client{}
-			req.Header.Set("X-Ubuntu-Architecture", arch)
+		var wg sync.WaitGroup
+		wg.Add(len(architectures) * 2)
 
-			resp, err := client.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				jsonResponses <- resp.Body
-			}
-		}(arch, url)
-	}
+		// Go and fetch for each architecture asynchronuously
+		for _, arch := range architectures {
+			go func(arch string, url string) {
+				defer wg.Done()
 
-	// Collect and process the results
-	go func() {
-		for response := range jsonResponses {
-			defer response.Close()
-			var tmp StoreResponse
-			err := json.NewDecoder(response).Decode(&tmp)
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				if len(tmp.Architecture) < 1 {
-					tmp.Architecture = append(tmp.Architecture, "n/a")
+				// Create HTTP request & Client
+				req, err := http.NewRequest("GET", url, nil)
+				if err != nil {
+					log.Fatal("NewRequest: ", err)
+					return
 				}
-				storeResponses = append(storeResponses, tmp)
-			}
-			wg.Done()
-		}
-	}()
+				req.Header.Set("X-Ubuntu-Series", "16")
+				client := &http.Client{}
+				req.Header.Set("X-Ubuntu-Architecture", arch)
 
-	wg.Wait()
+				resp, err := client.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+					jsonResponses <- resp.Body
+				}
+			}(arch, url)
+		}
+
+		// Collect and process the results
+		go func() {
+			for response := range jsonResponses {
+				defer response.Close()
+				var tmp StoreResponse
+				err := json.NewDecoder(response).Decode(&tmp)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+					if len(tmp.Architecture) < 1 {
+						tmp.Architecture = append(tmp.Architecture, "n/a")
+					}
+					storeResponses = append(storeResponses, tmp)
+				}
+				wg.Done()
+			}
+		}()
+
+		wg.Wait()
+	}
 
 	// Report back
 	show(storeResponses)
